@@ -1,4 +1,4 @@
-package com.example.booking.ui;
+package com.example.booking.global;
 
 import lombok.Getter;
 import org.springframework.http.HttpStatus;

@@ -1,4 +1,4 @@
-package com.example.booking.ui;
+package com.example.booking.application;
 
 public record OrderItemRequest(
         Long productId,

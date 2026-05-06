@@ -2,7 +2,7 @@ package com.example.booking.application;
 
 import java.util.List;
 
-public record OrderPaymentCreateRequest(
+public record OrderCreateRequest(
         String idempotencyKey,
         List<OrderItemRequest> items,
         List<PaymentMethodRequest> payments

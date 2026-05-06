@@ -1,4 +1,9 @@
 package com.example.booking.domain.payment;
 
-public class PgClientConfirmResponse {
+public record PgClientConfirmResponse(
+        boolean isSuccess,
+        boolean isFail,
+        boolean isRetriable,
+        String message
+) {
 }

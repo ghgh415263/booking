@@ -6,10 +6,10 @@ import com.example.booking.domain.Order;
 import java.math.BigDecimal;
 import java.util.List;
 
-public class PgPaymentStrategy implements PaymentStrategy {
+public class PgConfirmNeededPaymentStrategy implements ConfirmNeededPaymentStrategy {
 
     @Override
-    public OrderCreateResponse pay(List<Payment> paymentList, long memberId, Order order, List<ReservedProduct> reservedProducts) {
+    public OrderCreateResponse pay(List<Payment> paymentList, long memberId, Order order) {
 
         BigDecimal paymentTotalAmount = paymentList.stream()
                 .map(Payment::getAmount)

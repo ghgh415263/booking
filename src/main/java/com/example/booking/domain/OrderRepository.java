@@ -7,11 +7,15 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
-public interface OrderPaymentRepository extends JpaRepository<OrderPayment, String> {
+public interface OrderRepository extends JpaRepository<Order, String> {
 
-    Optional<OrderPayment> findByIdempotencyKey(String idempotencyKey);
+    Optional<Order> findByIdempotencyKey(String idempotencyKey);
 
-    @Modifying(clearAutomatically = true)
-    @Query("UPDATE OrderPayment o SET o.status = :status WHERE o.orderId = :orderId")
-    int updateStatus(@Param("orderId") String orderId, @Param("status") OrderStatus status);
+    @Modifying
+    @Query("UPDATE Order o SET o.status = com.example.booking.domain.OrderStatus.CANCELED WHERE o.orderId = :orderId")
+    int markAsCanceled(@Param("orderId") String orderId);
+
+    @Modifying
+    @Query("UPDATE Order o SET o.status = com.example.booking.domain.OrderStatus.PAID, o.paidAt = CURRENT_TIMESTAMP WHERE o.orderId = :orderId")
+    int markAsPaid(@Param("orderId") String orderId);
 }

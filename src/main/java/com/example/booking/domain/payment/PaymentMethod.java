@@ -1,4 +1,4 @@
-package com.example.booking.domain;
+package com.example.booking.domain.payment;
 
 public enum PaymentMethod {
     CARD,

@@ -1,4 +1,4 @@
-package com.example.booking.ui;
+package com.example.booking.global;
 
 /**
  * API 성공 응답 정보를 표현하는 DTO 클래스입니다.

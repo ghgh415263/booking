@@ -1,4 +1,6 @@
-package com.example.booking.ui;
+package com.example.booking.application;
 
-public record OrderCreateResponse (String orderId, long amount) {
+import com.example.booking.domain.OrderStatus;
+
+public record OrderCreateResponse (String orderId, OrderStatus orderStatus) {
 }

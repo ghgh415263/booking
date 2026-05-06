@@ -1,4 +1,8 @@
 package com.example.booking.domain;
 
-public class MemberPointSummary {
+import java.math.BigDecimal;
+
+public record MemberPointSummary(
+        BigDecimal point
+) {
 }

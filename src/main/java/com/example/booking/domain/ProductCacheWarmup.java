@@ -1,6 +1,5 @@
-package com.example.booking.infra;
+package com.example.booking.domain;
 
-import com.example.booking.domain.ProductDao;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -14,9 +13,7 @@ public class ProductCacheWarmup implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-
         Long targetProductId = 1L;
-
         productDao.findById(targetProductId);
     }
 }

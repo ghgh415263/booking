@@ -14,7 +14,7 @@ import java.util.UUID;
 @Table(name = "orders")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class OrderPayment implements Persistable<String> {
+public class Order implements Persistable<String> {
 
     @Id
     @Column(name = "order_id", length = 50)
@@ -39,16 +39,12 @@ public class OrderPayment implements Persistable<String> {
     @Column(updatable = false, insertable = false, nullable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
 
-    public OrderPayment(Long memberId, BigDecimal totalAmount, String idempotencyKey) {
+    public Order(Long memberId, BigDecimal totalAmount, String idempotencyKey) {
         this.orderId = UUID.randomUUID().toString();
         this.idempotencyKey = idempotencyKey;
         this.memberId = memberId;
         this.totalAmount = totalAmount;
         this.status = OrderStatus.READY;
-    }
-
-    public void markPgNeed() {
-        this.status = OrderStatus.PG_NEED;
     }
 
     public void markPaid() {
@@ -58,16 +54,6 @@ public class OrderPayment implements Persistable<String> {
 
     public void cancel() {
         this.status = OrderStatus.CANCELED;
-    }
-
-    public void markProcessing() {
-        if (status == OrderStatus.PAID)
-            throw new IllegalStateException("이미 지불된 주문은 결제진행이 불가능합니다.");
-        this.status = OrderStatus.PROCESSING;
-    }
-
-    public boolean canProceedPgPayment(){
-        return status == OrderStatus.PG_NEED;
     }
 
     @Override

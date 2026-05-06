@@ -4,7 +4,7 @@ import com.example.booking.domain.*;
 import com.example.booking.domain.payment.Payment;
 import com.example.booking.domain.payment.PaymentMethodService;
 import com.example.booking.domain.payment.PaymentRepository;
-import jakarta.persistence.EntityManager;
+import com.example.booking.domain.payment.ReservedProduct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -18,9 +18,9 @@ import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Service
-public class OrderPaymentService {
+public class OrderService {
 
-    private final OrderPaymentRepository orderPaymentRepository;
+    private final OrderRepository orderRepository;
 
     private final ProductRepository productRepository;
 
@@ -30,28 +30,48 @@ public class OrderPaymentService {
 
     private final PaymentRepository paymentRepository;
 
-    private final EntityManager em;
-
+    /**
+     * 주문 생성 및 결제 초기 처리 로직
+     *
+     * <p>멱등키(idempotencyKey)를 기반으로 중복 주문 생성을 방지하며,
+     * 주문 생성 → 재고 예약 → 주문 아이템 생성 → 결제 정보 생성까지 수행한다.
+     *
+     * <p>이후 결제 방식(PG / 포인트 / 혼합)에 따라 PaymentStrategy로 위임한다.
+     *
+     * @param req 주문 생성 요청 정보
+     * @param memberId 회원 ID
+     * @return 주문 생성 및 결제 처리 결과
+     */
     @Transactional
-    public OrderCreateResponse create(OrderPaymentCreateRequest req, Long memberId) {
-        return orderPaymentRepository.findByIdempotencyKey(req.idempotencyKey())
-                .map(order -> new OrderCreateResponse(order.getOrderId(), order.getTotalAmount(), order.getStatus()))
-                .orElseGet(() -> createNewOrderPayment(req, req.idempotencyKey(), memberId));
+    public OrderCreateResponse create(OrderCreateRequest req, Long memberId) {
+        return orderRepository.findByIdempotencyKey(req.idempotencyKey())
+                .map(order -> new OrderCreateResponse(order.getOrderId(), order.getStatus()))
+                .orElseGet(() -> createNewOrder(req, req.idempotencyKey(), memberId));
     }
 
-    private OrderCreateResponse createNewOrderPayment(OrderPaymentCreateRequest req, String idempotencyKey, Long memberId) {
-        List<Long> ids = req.items().stream()
+    private OrderCreateResponse createNewOrder(OrderCreateRequest req, String idempotencyKey, Long memberId) {
+        List<Long> productIds = req.items().stream()
                 .map(OrderItemRequest::productId)
                 .distinct()
                 .toList();
 
-        Map<Long, Product> productMap = productRepository.findByIdIn(ids)
+        Map<Long, Product> productMap = productRepository.findByIdIn(productIds)
                 .stream()
                 .collect(Collectors.toMap(Product::getId, Function.identity()));
 
-        if (productMap.size() != ids.size()) {
+        if (productMap.size() != productIds.size()) {
             throw new ProductNotFoundException();
         }
+
+        validateEventProducts(req.items(), productMap);
+
+        req.items().forEach(item -> {
+            Product product = productMap.get(item.productId());
+            if (product == null) {
+                throw new IllegalArgumentException( "상품이 존재하지 않습니다. productId=" + item.productId());
+            }
+            product.reserve(item.quantity());
+        });
 
         // 총액 계산
         BigDecimal totalPrice = req.items().stream()
@@ -62,23 +82,22 @@ public class OrderPaymentService {
                 })
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 4. 주문 저장
-        OrderPayment orderPayment = new OrderPayment(memberId, totalPrice, idempotencyKey);
+        // 주문 저장
+        Order order = new Order(memberId, totalPrice, idempotencyKey);
         try {
-            orderPaymentRepository.saveAndFlush(orderPayment);
+            orderRepository.saveAndFlush(order);
         } catch (DataIntegrityViolationException e) {
-            return orderPaymentRepository.findByIdempotencyKey(idempotencyKey)
-                    .map(o -> new OrderCreateResponse(o.getOrderId(), o.getTotalAmount(), o.getStatus()))
+            return orderRepository.findByIdempotencyKey(idempotencyKey)
+                    .map(o -> new OrderCreateResponse(o.getOrderId(), o.getStatus()))
                     .orElseThrow(() -> new OrderNotFoundException(e));
         }
-        boolean managed = em.contains(orderPayment);
 
         // 주문아이템 생성
         List<OrderItem> items = req.items().stream()
                 .map(item -> {
                     Product product = productMap.get(item.productId());
                     return new OrderItem(
-                            orderPayment.getOrderId(),
+                            order.getOrderId(),
                             product.getId(),
                             product.getName(),
                             BigDecimal.valueOf(product.getPrice()),
@@ -90,13 +109,33 @@ public class OrderPaymentService {
         orderItemRepository.saveAll(items);
 
         List<Payment> paymentList = req.payments().stream()
-                .map(p -> new Payment(orderPayment.getOrderId(), p.type(), p.amount()))
+                .map(p -> new Payment(order.getOrderId(), p.type(), p.amount()))
                 .toList();
-
-        paymentMethodService.proceed(paymentList, memberId, orderPayment);
 
         paymentRepository.saveAll(paymentList);
 
-        return new OrderCreateResponse(orderPayment.getOrderId(), orderPayment.getTotalAmount(), orderPayment.getStatus());
+        List<ReservedProduct> reservedProducts = req.items().stream()
+                .map(item -> new ReservedProduct(
+                        productMap.get(item.productId()),
+                        item.quantity()
+                ))
+                .toList();
+
+        return paymentMethodService.proceed(paymentList, memberId, order, reservedProducts);
+    }
+
+    private void validateEventProducts(
+            List<OrderItemRequest> items,
+            Map<Long, Product> productMap
+    ) {
+        items.forEach(item -> {
+            Product product = productMap.get(item.productId());
+
+            if (product.isEventProduct() && item.quantity() > 1) {
+                throw new IllegalStateException(
+                        "이벤트 상품은 1개만 구매할 수 있습니다. productId=" + product.getId()
+                );
+            }
+        });
     }
 }

@@ -10,12 +10,12 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @RequiredArgsConstructor
-public class PointAndPgPaymentStrategy implements PaymentStrategy {
+public class PointAndPgConfirmNeededPaymentStrategy implements ConfirmNeededPaymentStrategy {
 
     private final MemberPointRepository memberPointRepository;
 
     @Override
-    public OrderCreateResponse pay(List<Payment> paymentList, long memberId, Order order, List<ReservedProduct> reservedProducts) {
+    public OrderCreateResponse pay(List<Payment> paymentList, long memberId, Order order) {
         BigDecimal paymentTotalAmount = paymentList.stream()
                 .map(Payment::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

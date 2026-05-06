@@ -1,8 +1,10 @@
-package com.example.booking.ui;
+package com.example.booking.application;
 
-import com.example.booking.domain.PaymentMethod;
+import com.example.booking.domain.payment.PaymentMethod;
+
+import java.math.BigDecimal;
 
 public record PaymentMethodRequest(
         PaymentMethod type,
-        Long amount
+        BigDecimal amount
 ) {}

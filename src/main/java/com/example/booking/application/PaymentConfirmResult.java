@@ -1,4 +1,9 @@
 package com.example.booking.application;
 
-public class PaymentConfirmResult {
+import com.example.booking.domain.payment.PaymentStatus;
+
+public record PaymentConfirmResult(
+        PaymentStatus paymentStatus,
+        String message
+) {
 }

@@ -1,4 +1,4 @@
-package com.example.booking.domain;
+package com.example.booking.domain.payment;
 
 import com.example.booking.global.CustomException;
 import org.springframework.http.HttpStatus;
