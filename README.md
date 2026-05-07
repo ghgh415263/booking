@@ -14,16 +14,122 @@
 
 ## 셋팅 방법
 
-### 1. 프로젝트 열기
-IntelliJ 실행 → File → Open → booking 폴더 선택
+### JDK 17 및 언어 수준 설정 (상세)
+단순히 Project만 바꾸면 실행 시 에러가 날 수 있으므로 아래 3곳을 모두 확인해야 합니다.
+
+Project: File → Project Structure → Project → SDK를 17로 선택.
+
+Modules: 위와 동일 창의 Modules 탭 → Language level을 17로 설정.
+
+Java Compiler: File → Settings (Ctrl+Alt+S) → Build, Execution, Deployment → Compiler → Java Compiler → Project bytecode version을 17로 설정.
+
+### Docker 환경 준비 (스프링 도커 컴포즈용)
+스프링 부트 3.1부터 지원되는 spring-boot-docker-compose 의존성을 사용한다면, 애플리케이션 실행 시 자동으로 컨테이너가 떠야 합니다.
+
+Docker Desktop 실행: 프로젝트를 실행하기 전 반드시 Docker Desktop(또는 Docker Engine)이 실행 중이어야 합니다.
+
+IntelliJ Docker 플러그인 확인: Settings → Plugins → Docker 설치 확인.
+
+-> 이후에 인텔리제이로 실행하면 된다
+
+---
+# 시스템 아키텍처
+현재 구현은 WAS만 되었습니다. WAS를 IDE로 열어서 실행하면 됩니다.
+<img width="553" height="340" alt="image" src="https://github.com/user-attachments/assets/d2ea555d-9c67-4381-afeb-66315ca0f10a" />
 
 
-### 2. Maven 프로젝트 확인
-오른쪽 Maven 탭 확인 → Maven Projects import 완료 여부 확인
+---
+# Database Schema
+히스토리 테이블이나 AUDITING 필드들은 제외했습니다.
+```sql
+-- =========================================
+-- PRODUCT
+-- 단순하게 재고도 해당 엔티티에 포함
+-- =========================================
+CREATE TABLE product (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(19,2) NOT NULL,
+    check_in_at DATETIME NULL,
+    check_out_at DATETIME NULL,
+    total_stock INT NOT NULL DEFAULT 0,
+    reserved_stock INT NOT NULL DEFAULT 0,
+    event_product BOOLEAN NOT NULL DEFAULT FALSE
+);
 
+-- =========================================
+-- MEMBER_POINT
+-- =========================================
+CREATE TABLE member_point (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    member_id BIGINT NOT NULL UNIQUE,
+    balance DECIMAL(19,2) NOT NULL DEFAULT 0.00,
+    reserved DECIMAL(19,2) NOT NULL DEFAULT 0.00
+);
 
-### 3. JDK 17 설정 (중요)
-File → Project Structure → Project
+-- =========================================
+-- ORDERS
+-- =========================================
+CREATE TABLE orders (
+    order_id VARCHAR(50) PRIMARY KEY,
+    member_id BIGINT NOT NULL,
+    total_amount DECIMAL(15,2) NOT NULL,
+    idempotency_key VARCHAR(50) NOT NULL UNIQUE,
+    status VARCHAR(30) NOT NULL,
+    paid_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_orders_member_id ON orders(member_id);
+CREATE INDEX idx_orders_status ON orders(status);
+
+-- =========================================
+-- ORDER_ITEM
+-- =========================================
+CREATE TABLE order_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_id VARCHAR(50) NOT NULL,
+    product_id BIGINT NOT NULL,
+    product_name VARCHAR(255) NOT NULL,
+    price DECIMAL(19,2) NOT NULL,
+    quantity INT NOT NULL,
+    total_price DECIMAL(19,2) NOT NULL,
+
+    CONSTRAINT fk_order_item_order
+        FOREIGN KEY (order_id)
+            REFERENCES orders(order_id)
+            ON DELETE CASCADE,
+
+    CONSTRAINT fk_order_item_product
+        FOREIGN KEY (product_id)
+            REFERENCES product(id)
+);
+
+CREATE INDEX idx_order_item_order_id ON order_item(order_id);
+
+-- =========================================
+-- PAYMENT
+-- =========================================
+CREATE TABLE payment (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_id VARCHAR(50) NOT NULL,
+    method VARCHAR(20) NOT NULL,
+    amount DECIMAL(19,2) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    approved_at DATETIME NULL,
+    payment_key VARCHAR(100) NULL UNIQUE,
+    failed_count INT NOT NULL DEFAULT 0,
+    fail_reason VARCHAR(255) NULL,
+
+    CONSTRAINT fk_payment_order
+        FOREIGN KEY (order_id)
+            REFERENCES orders(order_id)
+            ON DELETE CASCADE
+);
+
+CREATE INDEX idx_payment_order_id ON payment(order_id);
+```
+
 
 ---
 # API 소개
@@ -42,14 +148,89 @@ X-MEMBER-ID: 1
 ```
 인증 로그인 대신 X-MEMBER-ID를 헤더에 넣는걸로 단순 대체할 것입니다.
 또한, 상품과 회원 모두 pk는 1만 존재한다고 가정하였습니다.
-
+<br>
+<br>
 ## Order And Payment Create API (이벤트 주문 및 지불 생성)
 
 ### 개요
 
-이 API는 이벤트 상품을 기반으로 **이벤트 주문 및 지불 생성하는 API**입니다.
+이 API는 이벤트 상품을 기반으로 **주문 및 지불을 생성하는 API**입니다.
 
-- 상품 재고 예약
-- 주문 생성 (idempotency 지원)
+- 멱등성 기반 중복 주문 방지
+- 상품 조회 및 검증
+- 재고 예약 처리
+- 주문 및 주문 아이템 생성
 - 결제 정보 생성
-- 결제 전략으로 흐름 전달 (여러 결제 방식에 따라 다른 전략을 사용하도록 만듬)
+- 결제 수단별 전략 처리
+- 포인트 / PG / 혼합 결제 지원
+
+### Example Request
+```http
+POST /event/orders
+X-MEMBER-ID: 1
+Content-Type: application/json
+```
+
+### Request Body
+
+```json
+{
+  "idempotencyKey": "ORDER-20260507-0001", #멱등성을 위한 키
+  "items": [   #상품정보
+    {
+      "productId": 1,
+      "quantity": 1
+    }
+  ],
+  "payments": [  # 지불정보
+    {
+      "type": "POINT",
+      "amount": 5000
+    },
+    {
+      "type": "PG",
+      "amount": 25000
+    }
+  ]
+}
+```
+<br><br>
+## Payment Confirm API (PG 결제 승인 API)
+
+### 개요
+
+이 API는 PG(Payment Gateway) 결제 승인을 처리하는 API입니다.
+
+클라이언트에서 결제창 완료 후 전달받은 결제 정보를 기반으로
+실제 PG 승인(confirm)을 수행합니다.
+
+## 처리 흐름
+
+```text
+1. 주문 상태 검증
+2. 주문 상태 PROCESSING 변경
+3. PG 승인 요청
+4. PG 응답 수신
+5. 결제 상태 반영
+6. 주문 완료 처리
+7. 재고 확정
+```
+
+## Example Request
+
+```http
+POST /event/orders/confirm
+X-MEMBER-ID: 1
+Content-Type: application/json
+```
+
+## Request Body
+
+```json
+{
+  "paymentKey": "pay_202605070001",
+  "orderId": "202605070001",
+  "amount": 30000
+}
+```
+
