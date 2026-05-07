@@ -5,6 +5,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Getter
@@ -26,7 +27,7 @@ public class Product {
      * 판매 가격
      */
     @Column(nullable = false)
-    private Long price;
+    private BigDecimal price;
 
     /**
      * 숙소/예약 상품 체크인 시간
@@ -52,7 +53,7 @@ public class Product {
 
     public Product(
             String name,
-            Long price,
+            BigDecimal price,
             LocalDateTime checkInAt,
             LocalDateTime checkOutAt,
             boolean eventProduct
@@ -66,12 +67,11 @@ public class Product {
         this.eventProduct = eventProduct;
     }
 
-    private void validatePrice(Long price) {
-        if (price == null || price < 0) {
+    private void validatePrice(BigDecimal price) {
+        if (price == null || price.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("상품 가격은 0 이상이어야 합니다.");
         }
     }
-
     /**
      * 현재 구매 가능한 재고
      */

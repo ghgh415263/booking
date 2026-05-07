@@ -1,11 +1,12 @@
 package com.example.booking.domain;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record ProductSummary(
         Long id,
         String name,
-        Long price,
+        BigDecimal price,
         LocalDateTime checkInAt,
         LocalDateTime checkOutAt
 ) {

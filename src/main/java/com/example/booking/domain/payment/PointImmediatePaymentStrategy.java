@@ -21,9 +21,6 @@ public class PointImmediatePaymentStrategy implements ImmediatePaymentStrategy {
         MemberPoint memberPoint = memberPointRepository.findByMemberId(memberId)
                 .orElseThrow(PointDataNotFoundException::new);
 
-        if (!order.getTotalAmount().equals(payment.getAmount())) {
-            throw new IllegalArgumentException("주문 총가격과 지불 총가격이 맞지않습니다.");
-        }
         memberPoint.deductImmediately(payment.getAmount());
         payment.markSuccess();
         order.markPaid();

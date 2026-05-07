@@ -33,9 +33,12 @@ public class Payment {
 
     private LocalDateTime approvedAt;
 
+    @Column(unique = true)
     private String paymentKey;
 
     private int failedCount;
+
+    private String failReason;
 
     public Payment(String orderId,
                    PaymentMethod method,
@@ -51,16 +54,21 @@ public class Payment {
     // ===== 상태 변경 =====
 
     public void markProcessing() {
+        if (this.status == PaymentStatus.SUCCESS) {
+            throw new IllegalStateException("이미 성공한 요청입니다.");
+        }
+        if (this.status == PaymentStatus.FAILED) {
+            throw new IllegalStateException("이미 실패한 요청입니다.");
+        }
+        if (this.status != PaymentStatus.PENDING) {
+            throw new IllegalStateException("결제 처리가 가능한 상태가 아닙니다. 현재 상태: " + this.status);
+        }
         this.status = PaymentStatus.PROCESSING;
     }
 
     public void markSuccess() {
         this.status = PaymentStatus.SUCCESS;
         this.approvedAt = LocalDateTime.now();
-    }
-
-    public void markFail() {
-        this.status = PaymentStatus.FAILED;
     }
 
     public boolean isPgPayment() {

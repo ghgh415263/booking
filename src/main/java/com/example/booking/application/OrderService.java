@@ -63,6 +63,23 @@ public class OrderService {
             throw new ProductNotFoundException();
         }
 
+        // 총액 계산
+        BigDecimal totalPrice = req.items().stream()
+                .map(item -> {
+                    Product p = productMap.get(item.productId());
+                    return p.getPrice()
+                            .multiply(BigDecimal.valueOf(item.quantity()));
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal totalPaymentPrice = req.payments().stream()
+                .map(PaymentMethodRequest::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (totalPrice.compareTo(totalPaymentPrice) != 0) {
+            throw new IllegalArgumentException("결제 금액 불일치");
+        }
+
         validateEventProducts(req.items(), productMap);
 
         req.items().forEach(item -> {
@@ -72,15 +89,6 @@ public class OrderService {
             }
             product.reserve(item.quantity());
         });
-
-        // 총액 계산
-        BigDecimal totalPrice = req.items().stream()
-                .map(item -> {
-                    Product p = productMap.get(item.productId());
-                    return BigDecimal.valueOf(p.getPrice())
-                            .multiply(BigDecimal.valueOf(item.quantity()));
-                })
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 주문 저장
         Order order = new Order(memberId, totalPrice, idempotencyKey);
@@ -100,7 +108,7 @@ public class OrderService {
                             order.getOrderId(),
                             product.getId(),
                             product.getName(),
-                            BigDecimal.valueOf(product.getPrice()),
+                            product.getPrice(),
                             item.quantity()
                     );
                 })

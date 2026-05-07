@@ -47,10 +47,10 @@ public class ConfirmPaymentValidator {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("CARD 또는 YPAY 결제가 필요합니다"));
 
+        paymentList.forEach(Payment::markProcessing);
+
         if (payment.getAmount().compareTo(request.amount()) != 0) {
             throw new IllegalArgumentException("결제 금액이 주문과 맞지 않습니다.");
         }
-
-        paymentList.forEach(Payment::markProcessing);
     }
 }

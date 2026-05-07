@@ -6,7 +6,6 @@ import com.example.booking.domain.MemberPointRepository;
 import com.example.booking.domain.Order;
 import lombok.RequiredArgsConstructor;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -16,13 +15,7 @@ public class PointAndPgConfirmNeededPaymentStrategy implements ConfirmNeededPaym
 
     @Override
     public OrderCreateResponse pay(List<Payment> paymentList, long memberId, Order order) {
-        BigDecimal paymentTotalAmount = paymentList.stream()
-                .map(Payment::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        if (!order.getTotalAmount().equals(paymentTotalAmount)) {
-            throw new IllegalArgumentException("주문 총가격과 지불 총가격이 맞지않습니다.");
-        }
         paymentList.stream()
                 .filter(Payment::isPointPayment)
                 .findFirst()
